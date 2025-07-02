@@ -1,0 +1,54 @@
+name: Alfred Jarvis CI
+
+on:
+  pull_request:
+    types: [opened, edited]
+  workflow_dispatch:
+
+jobs:
+  call-chatgpt:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: npm install openai
+
+    - name: Generate code suggestions via ChatGPT
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        node << 'EOF'
+        import { Configuration, OpenAIApi } from "openai";
+        const config = new Configuration({ apiKey: process.env.OPENAI_API_KEY });
+        const openai = new OpenAIApi(config);
+        (async () => {
+          const pr = process.env.PR_BODY || "No PR description";
+          const resp = await openai.createChatCompletion({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: "You are Alfred Jarvis, a corporate-savvy code reviewer with a traditional outlook and a forward-thinking mindset." },
+              { role: "user", content: `Review this pull request:\n\n${pr}` }
+            ]
+          });
+          console.log("Alfred’s feedback:\n", resp.data.choices[0].message.content);
+        })();
+        EOF
+
+    - name: Post feedback to PR
+      uses: peter-evans/create-or-update-comment@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        issue-number: ${{ github.event.pull_request.number }}
+        body: |
+          **Alfred Jarvis’ Code Review**  
+          <!-- run output will appear below -->  
+          ```
+          ${{ steps.call-chatgpt.outputs.stdout }}
+          ```
